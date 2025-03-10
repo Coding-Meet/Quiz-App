@@ -57,7 +57,6 @@ https://github.com/user-attachments/assets/c7549bc0-660d-4bef-b1fd-580d5fbe4f0b
 
 3. **Quiz Screen**
    - Question display
-   - Multiple choice answers
    - Progress tracking
    - Score calculation
 
@@ -84,5 +83,3 @@ git clone https://github.com/Coding-Meet/Quiz-App.git
 The app uses the Open Trivia Database API:
 - Base URL: `https://opentdb.com/api.php`
 - Supports multiple categories
-- Various difficulty levels
-- Multiple choice questions
