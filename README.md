@@ -4,6 +4,16 @@ A modern Android quiz application built with Jetpack Compose and following MVI a
 
 > 🚀 **Built with [Cursor AI](https://cursor.sh/) in just 1 hour!**
 
+## 📱 Download APK
+
+You can download the latest APK from the [output/QuizApp.apk](output/QuizApp.apk) file.
+
+## 🎥 Demo
+
+Check out the app in action:
+
+https://github.com/Coding-Meet/Quiz-App/blob/main/output/demo.mp4
+
 ## Features
 
 - 🎨 Material 3 Design with dynamic theming
