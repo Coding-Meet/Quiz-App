@@ -12,7 +12,7 @@ You can download the latest APK from the [output/QuizApp.apk](output/quiz-app.ap
 
 Check out the app in action:
 
-https://github.com/Coding-Meet/Quiz-App/blob/main/output/app_working_video.mp4
+https://github.com/user-attachments/assets/c7549bc0-660d-4bef-b1fd-580d5fbe4f0b
 
 ## Features
 
