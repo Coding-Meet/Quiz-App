@@ -6,13 +6,13 @@ A modern Android quiz application built with Jetpack Compose and following MVI a
 
 ## 📱 Download APK
 
-You can download the latest APK from the [output/QuizApp.apk](output/QuizApp.apk) file.
+You can download the latest APK from the [output/QuizApp.apk](output/quiz-app.apk) file.
 
 ## 🎥 Demo
 
 Check out the app in action:
 
-https://github.com/Coding-Meet/Quiz-App/blob/main/output/demo.mp4
+https://github.com/Coding-Meet/Quiz-App/blob/main/output/app_working_video.mp4
 
 ## Features
 
