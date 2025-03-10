@@ -1,6 +1,6 @@
 package com.coding.meet.quizapp.ui.screens
 
-import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -9,9 +9,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.coding.meet.quizapp.model.Question
+import com.coding.meet.quizapp.mvi.QuizContract
 import com.coding.meet.quizapp.viewmodel.QuizViewModel
 
 @Composable
@@ -19,71 +21,81 @@ fun QuizScreen(
     viewModel: QuizViewModel,
     onBackToCategories: () -> Unit
 ) {
-    val quizState by viewModel.quizState.collectAsState()
-    
+    val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+
+    // Handle side effects
+    LaunchedEffect(Unit) {
+        viewModel.effect.collect { effect ->
+            when (effect) {
+                is QuizContract.Effect.NavigateBack -> onBackToCategories()
+                is QuizContract.Effect.ShowError -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+                is QuizContract.Effect.ShowToast -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         when {
-            quizState.questions.isEmpty() -> {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Loading questions...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+            state.isLoading -> {
+                LoadingScreen()
             }
-            quizState.isQuizComplete -> {
+            state.error != null -> {
+                ErrorScreen(
+                    error = state.error!!,
+                    onRetry = { 
+                        state.selectedCategoryId?.let { categoryId ->
+                            viewModel.onEvent(QuizContract.Event.LoadQuestions(categoryId))
+                        }
+                    }
+                )
+            }
+            state.isQuizComplete -> {
                 AnimatedVisibility(
                     visible = true,
                     enter = fadeIn() + expandVertically()
                 ) {
                     QuizCompletedScreen(
-                        score = quizState.score,
-                        totalQuestions = quizState.questions.size,
-                        onRestartQuiz = { viewModel.restartQuiz() },
+                        score = state.score,
+                        totalQuestions = state.questions.size,
+                        onRestartQuiz = { viewModel.onEvent(QuizContract.Event.RestartQuiz) },
                         onBackToCategories = onBackToCategories
                     )
                 }
             }
             else -> {
-                val currentQuestion = viewModel.getCurrentQuestion()
-                if (currentQuestion != null) {
+                state.currentQuestion?.let { question ->
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp)
                     ) {
                         QuizProgress(
-                            currentQuestion = quizState.currentQuestionIndex + 1,
-                            totalQuestions = quizState.questions.size
+                            progress = state.progress,
+                            currentQuestion = state.currentQuestionIndex + 1,
+                            totalQuestions = state.questions.size
                         )
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        AnimatedContent(
-                            targetState = currentQuestion,
-                            transitionSpec = {
-                                fadeIn(animationSpec = tween(300)) togetherWith
-                                        fadeOut(animationSpec = tween(300))
-                            }
-                        ) { question ->
-                            QuizContent(
-                                question = question,
-                                selectedAnswer = quizState.selectedAnswer,
-                                onAnswerSelected = { viewModel.selectAnswer(it) },
-                                onNextQuestion = { viewModel.moveToNextQuestion() }
-                            )
-                        }
+                        QuizContent(
+                            question = question,
+                            selectedAnswer = state.selectedAnswer,
+                            onAnswerSelected = { answer ->
+                                viewModel.onEvent(QuizContract.Event.SelectAnswer(answer))
+                            },
+                            onNextQuestion = {
+                                viewModel.onEvent(QuizContract.Event.NextQuestion)
+                            },
+                            isLastQuestion = state.currentQuestionIndex == state.questions.size - 1
+                        )
                     }
                 }
             }
@@ -92,7 +104,54 @@ fun QuizScreen(
 }
 
 @Composable
+fun LoadingScreen() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(48.dp),
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "Loading questions...",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+fun ErrorScreen(
+    error: String,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = error,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error
+        )
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text("Retry")
+        }
+    }
+}
+
+@Composable
 fun QuizProgress(
+    progress: Float,
     currentQuestion: Int,
     totalQuestions: Int
 ) {
@@ -111,14 +170,14 @@ fun QuizProgress(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "${(currentQuestion.toFloat() / totalQuestions * 100).toInt()}%",
+                text = "${(progress * 100).toInt()}%",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
         }
         
         LinearProgressIndicator(
-            progress = currentQuestion.toFloat() / totalQuestions,
+            progress = progress,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp),
@@ -133,7 +192,8 @@ fun QuizContent(
     question: Question,
     selectedAnswer: Int?,
     onAnswerSelected: (Int) -> Unit,
-    onNextQuestion: () -> Unit
+    onNextQuestion: () -> Unit,
+    isLastQuestion: Boolean = false
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -195,7 +255,7 @@ fun QuizContent(
                 )
             ) {
                 Text(
-                    text = if (question.id == question.options.size - 1) "Finish Quiz" else "Next Question",
+                    text = if (isLastQuestion) "Finish Quiz" else "Next Question",
                     style = MaterialTheme.typography.titleMedium
                 )
             }

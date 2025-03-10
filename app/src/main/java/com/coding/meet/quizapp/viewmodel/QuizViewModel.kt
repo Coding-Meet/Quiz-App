@@ -3,81 +3,75 @@ package com.coding.meet.quizapp.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.coding.meet.quizapp.model.Question
-import com.coding.meet.quizapp.model.QuizState
 import com.coding.meet.quizapp.data.repository.QuizRepository
 import com.coding.meet.quizapp.data.api.TriviaApiClient
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import com.coding.meet.quizapp.mvi.QuizContract
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class QuizViewModel : ViewModel() {
-    private val _quizState = MutableStateFlow(QuizState())
-    val quizState: StateFlow<QuizState> = _quizState.asStateFlow()
-    private val repository = QuizRepository()
+class QuizViewModel(
+    private val repository: QuizRepository = QuizRepository()
+) : ViewModel() {
+    private val _state = MutableStateFlow(QuizContract.State())
+    val state: StateFlow<QuizContract.State> = _state.asStateFlow()
+
+    private val _effect = MutableSharedFlow<QuizContract.Effect>()
+    val effect: SharedFlow<QuizContract.Effect> = _effect.asSharedFlow()
 
     init {
         Log.d("QuizViewModel", "ViewModel initialized")
     }
 
-    fun loadQuestions(
-        category: Int? = null,
-        difficulty: String? = null,
-        amount: Int = 10
-    ) {
+    fun onEvent(event: QuizContract.Event) {
+        when (event) {
+            is QuizContract.Event.LoadQuestions -> loadQuestions(event.categoryId)
+            is QuizContract.Event.SelectAnswer -> selectAnswer(event.answerIndex)
+            is QuizContract.Event.NextQuestion -> moveToNextQuestion()
+            is QuizContract.Event.RestartQuiz -> restartQuiz()
+            is QuizContract.Event.SelectCategory -> selectCategory(event.categoryId)
+        }
+    }
+
+    private fun loadQuestions(categoryId: Int) {
         viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
             try {
-                repository.getQuestions(amount, category, difficulty)
+                repository.getQuestions(category = categoryId)
                     .onSuccess { questions ->
-                        startQuiz(questions)
+                        _state.update { 
+                            it.copy(
+                                questions = questions,
+                                isLoading = false,
+                                currentQuestionIndex = 0,
+                                score = 0,
+                                selectedAnswer = null,
+                                isQuizComplete = false
+                            )
+                        }
                     }
                     .onFailure { error ->
-                        Log.e("QuizViewModel", "Error loading questions", error)
-                        // Handle error state if needed
+                        _state.update { it.copy(isLoading = false) }
+                        _effect.emit(QuizContract.Effect.ShowError(error.message ?: "Failed to load questions"))
                     }
             } catch (e: Exception) {
-                Log.e("QuizViewModel", "Error loading questions", e)
-                // Handle error state if needed
+                _state.update { it.copy(isLoading = false) }
+                _effect.emit(QuizContract.Effect.ShowError(e.message ?: "An unexpected error occurred"))
             }
         }
     }
 
-    fun startQuiz(questions: List<Question>) {
-        Log.d("QuizViewModel", "Starting quiz with ${questions.size} questions")
-        if (questions.isEmpty()) {
-            Log.e("QuizViewModel", "No questions provided")
-            return
-        }
-
-        viewModelScope.launch {
-            _quizState.update { currentState ->
-                currentState.copy(
-                    questions = questions,
-                    currentQuestionIndex = 0,
-                    score = 0,
-                    selectedAnswer = null,
-                    isQuizComplete = false
-                )
-            }
-            Log.d("QuizViewModel", "Quiz state updated with first question: ${getCurrentQuestion()?.question}")
-        }
+    private fun selectAnswer(answerIndex: Int) {
+        _state.update { it.copy(selectedAnswer = answerIndex) }
     }
 
-    fun selectAnswer(answerIndex: Int) {
-        Log.d("QuizViewModel", "Answer selected: $answerIndex")
-        _quizState.update { currentState ->
-            currentState.copy(selectedAnswer = answerIndex)
-        }
-    }
-
-    fun moveToNextQuestion() {
-        val currentState = _quizState.value
-        val currentQuestion = getCurrentQuestion()
+    private fun moveToNextQuestion() {
+        val currentState = _state.value
+        val currentQuestion = currentState.currentQuestion
         
         if (currentQuestion == null) {
-            Log.e("QuizViewModel", "Current question is null")
+            viewModelScope.launch {
+                _effect.emit(QuizContract.Effect.ShowError("No question available"))
+            }
             return
         }
 
@@ -86,27 +80,32 @@ class QuizViewModel : ViewModel() {
         val nextIndex = currentState.currentQuestionIndex + 1
         val isComplete = nextIndex >= currentState.questions.size
 
-        Log.d("QuizViewModel", "Moving to next question. Current score: $newScore, Next index: $nextIndex, Is complete: $isComplete")
-
-        _quizState.update { state ->
-            state.copy(
+        _state.update { 
+            it.copy(
                 currentQuestionIndex = nextIndex,
                 score = newScore,
                 selectedAnswer = null,
                 isQuizComplete = isComplete
             )
         }
+
+        if (isCorrect) {
+            viewModelScope.launch {
+                _effect.emit(QuizContract.Effect.ShowToast("Correct answer!"))
+            }
+        }
     }
 
-    fun getCurrentQuestion(): Question? {
-        val question = quizState.value.questions.getOrNull(quizState.value.currentQuestionIndex)
-        Log.d("QuizViewModel", "Getting current question: ${question?.question}")
-        return question
+    private fun restartQuiz() {
+        val categoryId = _state.value.selectedCategoryId
+        if (categoryId != null) {
+            loadQuestions(categoryId)
+        }
     }
 
-    fun restartQuiz() {
-        Log.d("QuizViewModel", "Restarting quiz")
-        loadQuestions() // Load new questions instead of reusing old ones
+    private fun selectCategory(categoryId: Int) {
+        _state.update { it.copy(selectedCategoryId = categoryId) }
+        loadQuestions(categoryId)
     }
 
     companion object {

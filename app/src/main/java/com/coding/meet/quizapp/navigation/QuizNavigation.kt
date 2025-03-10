@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.coding.meet.quizapp.mvi.QuizContract
 import com.coding.meet.quizapp.ui.components.ThemeMode
 import com.coding.meet.quizapp.ui.screens.CategoryScreen
 import com.coding.meet.quizapp.ui.screens.GetStartedScreen
@@ -88,7 +89,7 @@ fun QuizNavigation(
         ) { backStackEntry ->
             val categoryId = backStackEntry.arguments?.getString("categoryId")?.toIntOrNull()
             if (categoryId != null) {
-                viewModel.loadQuestions(category = categoryId)
+                viewModel.onEvent(QuizContract.Event.SelectCategory(categoryId = categoryId))
             }
             
             QuizScreen(
